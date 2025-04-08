@@ -1,0 +1,7 @@
+.idea
+__pycache__
+test_4MB.jpg
+*.png
+*.jpg
+*.mkv
+*.mp4
