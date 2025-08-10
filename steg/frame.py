@@ -6,7 +6,7 @@ from typing import Optional
 
 from PIL import Image, ImageDraw
 
-from util import generate_default_palette, list_fuzzy_search, fuzzy_equals
+from steg.util import generate_default_palette, list_fuzzy_search, fuzzy_equals
 
 
 class Frame:
@@ -62,6 +62,9 @@ class Frame:
         frame.drawable_image = ImageDraw.Draw(frame.image)
 
         return frame
+
+    def __len__(self):
+        return self.body_length
 
     def write(self, data: bytes | int) -> int:
         """
@@ -119,32 +122,32 @@ class Frame:
         length_bytes = struct.pack('>H', length)
 
         return [
-            (0, 0, 0), (255, 255, 255),  # magic bytes
+            self.palette[0x0], self.palette[0xFF],  # magic bytes
             self.palette[version],
-            (0, 0, 0), (0, 0, 0),  # reserved
+            self.palette[0x0], self.palette[0x0],  # reserved
             self.palette[frame_seqno],
             self.palette[tile_width],
             self.palette[tile_height],
             self.palette[length_bytes[0]],
             self.palette[length_bytes[1]],
-            (0, 0, 0), (0, 0, 0), (0, 0, 0)  # reserved
+            self.palette[0x0], self.palette[0x0], self.palette[0x0]  # reserved
         ]
 
     def decode(self, ignore_errors: bool = False) -> bytes:
         # find header -- starts with black
         # skip 8 rows and columns of pixels to try to avoid image edges
-        if not fuzzy_equals(self.image.getpixel(xy=(8, 8)), (0, 0, 0)):
-            raise Exception('failed to find header -- frame should start with a black tile')
+        if not fuzzy_equals(self.image.getpixel(xy=(8, 8)), self.palette[0x0]):
+            raise Exception(f'failed to find header -- first tile should be 0 (palette color: {self.palette[0x0]})')
 
         # count the number of pixels til we see a color change (to white)
         black_tile_width = 0
         while black_tile_width < self.image.width:
-            if fuzzy_equals(self.image.getpixel(xy=(black_tile_width+8, 8)), (255, 255, 255)):
+            if fuzzy_equals(self.image.getpixel(xy=(black_tile_width+8, 8)), self.palette[0xFF]):
                 break
 
             black_tile_width += 1
         else:
-            raise Exception('failed to find magic bytes in header -- the second tile should be white')
+            raise Exception(f'failed to find magic bytes in header -- second tile should be 255 (palette color: {self.palette[0xFF]})')
 
         black_tile_width += 8
 
@@ -160,7 +163,7 @@ class Frame:
         # [1] reserved
         # [2] reserved
         self.frame_seqno = header_bytes[3]
-        assert self.tile_width == header_bytes[4]
+        assert self.tile_width == header_bytes[4], f"ERROR: {self.tile_width} != {header_bytes[4]}"
         self.tile_height = header_bytes[5]
         self.body_length = (header_bytes[6] << 8) + header_bytes[7]
         # [8], [9], [10] reserved
@@ -178,8 +181,10 @@ class Frame:
                 self.y += self.tile_height
                 if self.image.height - self.y < math.ceil(self.tile_height / 2):
                     break
+
+            pixel = self.image.getpixel((self.x, self.y))
+
             try:
-                pixel = self.image.getpixel((self.x, self.y))
                 pixels.append(list_fuzzy_search(self.palette, pixel))
             except:
                 if ignore_errors:
@@ -187,6 +192,7 @@ class Frame:
                     pixels.append(0)
                 else:
                     raise
+
             num_tiles_read += 1
             self.x += self.tile_width
 

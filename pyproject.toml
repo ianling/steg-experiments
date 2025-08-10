@@ -1,0 +1,30 @@
+[project]
+name = "youtube-steg"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.13"
+dependencies = [
+    "Pillow",
+    "numpy",
+    "ffmpeg-python",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest"
+]
+types = [
+    "mypy",
+    "types-Pillow"
+]
+
+[project.scripts]
+loremipsum = "scripts.lorem_ipsum:main"
+
+[build-system]
+requires = ["uv_build"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = ""
+module-name = "steg"
