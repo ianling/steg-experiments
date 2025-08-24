@@ -1,14 +1,17 @@
+import glob
 import math
+import os
 import pathlib
+import re
+import shutil
+import tempfile
 
 import ffmpeg  # type: ignore
 
 from steg.frame import Frame
-from steg.util import factors
-
+from steg.util import factors, HEADER_LENGTH_BYTES
 
 VERSION = 1
-HEADER_LENGTH_BYTES = 13
 
 
 """
@@ -116,6 +119,47 @@ def encode(data: bytes, resolution: tuple[int, int] = (1280, 720), tile_width: i
     return saved_frame_paths
 
 
+def decode(video_path: str, keep_images: bool = False, fuzziness:int = 17) -> bytes:
+    decode_temp_image_mask = 'decodetmp%03d.png'
+    decode_temp_image_glob = 'decodetmp*.png'
+
+    tempdir = tempfile.mkdtemp()
+    video_to_images(video_path, os.path.join(tempdir, decode_temp_image_mask))
+
+    frames = glob.glob(os.path.join(tempdir, decode_temp_image_glob))
+    frames = sorted(frames, key=lambda x: float(re.findall(r"(\d+)", x)[-1]))
+
+    num_frames = len(frames)
+    frames_decoded = 0
+    result = b''
+    last_seqno = -1
+    next_seqno_expected = 0
+    for frame_path in frames:
+        frame_to_decode = Frame.load_from_file(frame_path)
+        frames_decoded += 1 # increment here in case this frame is a dupe
+
+        if frame_to_decode.frame_seqno == last_seqno:
+            # duplicate, skip
+            continue
+        elif frame_to_decode.frame_seqno != next_seqno_expected:
+            # out of order. this should probably abort
+            print(f"frame {frame_to_decode.frame_seqno} received out of order ({frame_path})")
+            continue
+        else:
+            last_seqno = frame_to_decode.frame_seqno
+            next_seqno_expected = (last_seqno + 1) % 256
+
+        result += frame_to_decode.decode(fuzziness=fuzziness)
+
+        print(f"{frames_decoded}/{num_frames} ({frames_decoded/num_frames*100:.1f}%)", end="\r")
+
+
+    if not keep_images:
+        shutil.rmtree(tempdir)
+
+    return result
+
+
 def video_to_images(video_path: str, output_path: str):
     (
         ffmpeg
@@ -126,9 +170,35 @@ def video_to_images(video_path: str, output_path: str):
 
 
 def images_to_video(image_file_names_wildcard: str, output_path: str, framerate: int = 20):
+    """
+
+
+    ffmpeg settings successful locally
+    720p: bitrate 600k
+
+    ffmpeg settings that were successful after upload to youtube:
+    720p: crf 18
+    1440p:
+
+    not successful locally:
+    720p: bitrate 300k
+
+    not successful after youtube:
+    1440p: crf 18
+    """
     (
         ffmpeg
         .input(image_file_names_wildcard, framerate=framerate)
-        .output(output_path, vcodec='libx264', video_bitrate='200k', crf=28, **{'x264-params': 'keyint=1:scenecut=0'})  # TODO: testing values here for bitrate and crf
+        .output(output_path,
+                vcodec='libx264',
+                video_bitrate='600k',
+                # crf=36,
+                pix_fmt='yuv420p',
+                color_primaries='bt709',
+                color_trc='bt709',
+                colorspace='bt709',
+                vf='scale=in_range=full:in_color_matrix=bt709:out_range=tv:out_color_matrix=bt709',
+                **{'x264-params': 'keyint=1:scenecut=0'},
+            )
         .run()
     )

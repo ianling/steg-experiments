@@ -19,7 +19,13 @@ types = [
 ]
 
 [project.scripts]
-loremipsum = "scripts.lorem_ipsum:main"
+encode_file = "scripts.encode_file:main"
+decode_video = "scripts.decode_video:main"
+rainbow = "scripts.rainbow:main"
+compare = "scripts.compare:main"
+byte_finder = "scripts.byte_finder:main"
+decode_frame = "scripts.decode_frame:main"
+video_frames = "scripts.video_frames:main"
 
 [build-system]
 requires = ["uv_build"]

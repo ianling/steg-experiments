@@ -5,3 +5,4 @@ __pycache__
 *.mkv
 *.mp4
 *.webm
+.DS_Store

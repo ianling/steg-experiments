@@ -2,11 +2,11 @@ import math
 import pathlib
 import struct
 from io import IOBase
-from typing import Optional
+from typing import Optional, Generator
 
 from PIL import Image, ImageDraw
 
-from steg.util import generate_default_palette, list_fuzzy_search, fuzzy_equals
+from steg.util import generate_default_palette, list_fuzzy_search, fuzzy_equals, HEADER_LENGTH_BYTES
 
 
 class Frame:
@@ -27,6 +27,8 @@ class Frame:
     default_tile_width = 16
     default_tile_height = 16
     header_length_bytes = 13
+
+    _header_decoded = False
 
     def __init__(self, frame_seqno: int, body_length: int, resolution: tuple[int, int], tile_width: int, tile_height: int, palette: Optional[list[tuple[int, int, int]]] = None, version: int = 1):
         self.version = version
@@ -55,11 +57,13 @@ class Frame:
         return frame
 
     @classmethod
-    def load_from_file(cls, file_handle: str | bytes | pathlib.Path | IOBase):
+    def load_from_file(cls, file_handle: str | bytes | pathlib.Path | IOBase, fuzziness=17):
         image = Image.open(file_handle)
         frame = cls(0, 0, (image.width, image.height), cls.default_tile_width, cls.default_tile_height)
         frame.image = image
         frame.drawable_image = ImageDraw.Draw(frame.image)
+
+        frame.decode_header(fuzziness=fuzziness)
 
         return frame
 
@@ -133,21 +137,49 @@ class Frame:
             self.palette[0x0], self.palette[0x0], self.palette[0x0]  # reserved
         ]
 
-    def decode(self, ignore_errors: bool = False) -> bytes:
+    def tiles(self) -> Generator[tuple]:
+        """
+        Generator that yields this frame's tile color tuples in order.
+        """
+        num_columns = self.width // self.tile_width
+        num_rows = self.height // self.tile_height
+        column, row = 0, 0
+
+        while row < num_rows:
+            yield self.get_tile(column, row)
+            column += 1
+            if column == num_columns:
+                column = 0
+                row += 1
+
+    def get_tile(self, column: int, row: int) -> tuple:
+        """
+        Retrieves the column at the given location.
+        Determines the x,y coordinate pair using the tile_width and tile_height fields.
+        :param column: (zero-indexed)
+        :param row: (zero-indexed)
+        :return:
+        """
+        x = column * self.tile_width + math.ceil(self.tile_width / 2)
+        y = row * self.tile_height + math.ceil(self.tile_height / 2)
+        return self.image.getpixel((x, y))
+
+    def decode_header(self, fuzziness=17):
         # find header -- starts with black
         # skip 8 rows and columns of pixels to try to avoid image edges
-        if not fuzzy_equals(self.image.getpixel(xy=(8, 8)), self.palette[0x0]):
+        if not fuzzy_equals(self.image.getpixel(xy=(8, 8)), self.palette[0x0], fuzziness=fuzziness):
             raise Exception(f'failed to find header -- first tile should be 0 (palette color: {self.palette[0x0]})')
 
         # count the number of pixels til we see a color change (to white)
         black_tile_width = 0
         while black_tile_width < self.image.width:
-            if fuzzy_equals(self.image.getpixel(xy=(black_tile_width+8, 8)), self.palette[0xFF]):
+            if fuzzy_equals(self.image.getpixel(xy=(black_tile_width + 8, 8)), self.palette[0xFF], fuzziness=fuzziness):
                 break
 
             black_tile_width += 1
         else:
-            raise Exception(f'failed to find magic bytes in header -- second tile should be 255 (palette color: {self.palette[0xFF]})')
+            raise Exception(
+                f'failed to find magic bytes in header -- second tile should be 255 (palette color: {self.palette[0xFF]})')
 
         black_tile_width += 8
 
@@ -158,7 +190,7 @@ class Frame:
         # read rest of header starting from the center of the third tile
         self.x = math.ceil(self.tile_width * 2.5)
         self.y = math.ceil(self.tile_height / 2)
-        header_bytes = self.read(self.header_length_bytes-2)
+        header_bytes = self.read(self.header_length_bytes - 2, fuzziness=fuzziness)
         self.version = header_bytes[0]
         # [1] reserved
         # [2] reserved
@@ -168,9 +200,14 @@ class Frame:
         self.body_length = (header_bytes[6] << 8) + header_bytes[7]
         # [8], [9], [10] reserved
 
-        return self.read(ignore_errors=ignore_errors)
+        self._header_decoded = True
 
-    def read(self, num_tiles_to_read: Optional[int] = None, ignore_errors: bool = False) -> bytes:
+    def decode(self, ignore_errors: bool = False, fuzziness=17) -> bytes:
+        if not self._header_decoded:
+            self.decode_header(fuzziness=fuzziness)
+        return self.read(ignore_errors=ignore_errors, fuzziness=fuzziness)
+
+    def read(self, num_tiles_to_read: Optional[int] = None, ignore_errors: bool = False, fuzziness: int = 17) -> bytes:
         num_tiles_read = 0
         pixels = []
         if num_tiles_to_read is None:
@@ -185,7 +222,7 @@ class Frame:
             pixel = self.image.getpixel((self.x, self.y))
 
             try:
-                pixels.append(list_fuzzy_search(self.palette, pixel))
+                pixels.append(list_fuzzy_search(self.palette, pixel, fuzziness=fuzziness))
             except:
                 if ignore_errors:
                     print(f"invalid tile {num_tiles_read} at ({self.x},{self.y}) {pixel}, ignoring")
