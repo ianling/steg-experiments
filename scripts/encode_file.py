@@ -13,13 +13,13 @@ class Args(argparse.Namespace):
 
 
 def main():
-    argparser = argparse.ArgumentParser(prog="video_frames")
+    argparser = argparse.ArgumentParser(prog="encode_file")
     argparser.add_argument('input_file')
     argparser.add_argument('output')
     argparser.add_argument('--fps', '-f', type=int, default=3)
     argparser.add_argument('--width', '-w', type=int, default=1280)
     argparser.add_argument('--height', '-H', type=int, default=720)
-    argparser.add_argument('--tile_size', '-t', type=int, default=16)
+    argparser.add_argument('--tile_size', '-t', type=int, default=None)
     args = argparser.parse_args(namespace=Args())
 
     with open(args.input_file, 'rb') as f:

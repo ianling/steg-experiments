@@ -1,6 +1,7 @@
 .idea
 __pycache__
 *.png
+!docs/*.png
 *.jpg
 *.mkv
 *.mp4

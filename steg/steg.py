@@ -34,8 +34,8 @@ default palette 2025-04-06: [(0, 0, 42), (0, 0, 84), (0, 0, 126), (0, 0, 168), (
 """
 
 def determine_tile_size(data_length: int, resolution: tuple[int, int]) -> tuple[int, int]:
-    min_tile_width = 32
-    min_tile_height = 32
+    min_tile_width = 16
+    min_tile_height = 16
     max_total_tiles_per_frame = (resolution[0] // min_tile_width) * (resolution[1] // min_tile_height)
     max_body_tiles_per_frame = max_total_tiles_per_frame - HEADER_LENGTH_BYTES
 
