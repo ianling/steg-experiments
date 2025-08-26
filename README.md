@@ -63,3 +63,7 @@ Video files containing one or more frames can be decoded in their entirety using
 The means of uploading to and downloading from Youtube is left up to the reader.
 I upload tests manually and use [yt-dlp](https://github.com/yt-dlp/yt-dlp) to download.
 My tests are viewable publicly on [my Youtube channel](https://www.youtube.com/@ianling8575/videos).
+
+## WebGPU Compute Shader Decoding
+The [webgpu](webgpu) directory contains an [index.html](webgpu/index.html) file you can open in your browser
+to decode videos locally. This page uses a WebGPU compute shader to decode the frames using the GPU.
