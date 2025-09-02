@@ -1,5 +1,7 @@
 This repo contains some experiments that involve encoding arbitrary data into video files that survive Youtube compression.
 
+Live demo you can try yourself: https://iancaling.com/steg/
+
 The current solution works 99% of the time and only rarely encounters errors in practice.
 It works 100% of the time under ideal conditions (i.e. when not round-tripped through Youtube).
 
