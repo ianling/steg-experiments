@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<head>
+    <title>steg webgpu test</title>
+    <style>
+        video {
+            max-width: 320px;
+            border: 1px solid #000000;
+        }
+
+        canvas {
+            max-width: 320px;
+            border: 1px solid #000000;
+        }
+    </style>
+</head>
+<body>
+<div>
+    <div>
+        <input id="file" type="file" name="file">
+    </div>
+
+    <div>
+        <button id="save">Save</button>
+    </div>
+    <div>
+        <textarea disabled id="hex" rows="30" cols="48">
+            raw hex
+        </textarea>
+        <textarea disabled id="ascii" rows="30" cols="48">
+            ascii
+        </textarea>
+    </div>
+
+    <div id="stats"></div>
+</div>
+
+<div></div>
+<div></div>
+
+<div>
+    <script type="module">
+        import {decodeVideo} from "./index.js";
+        import {saveDataToFileFirefox} from "./index.js";
+
+        function processDecodedResults(result) {
+            document.querySelector("#save").addEventListener('click', saveWrapper(result));
+
+            const hexElem = document.getElementById("hex");
+            const asciiElem = document.getElementById("ascii");
+            let hex = ""
+            let ascii = "";
+            result.forEach((byte) => {
+                hex += byte.toString(16).padStart(2, "0") + " ";
+                ascii += String.fromCharCode(byte);
+            })
+
+            hexElem.value = hex;
+            asciiElem.value = ascii;
+        }
+
+        async function handleFileChange(event) {
+            if(event.target.files.length === 0) return;
+
+            const startTime = Date.now();
+            const blob = event.target.files[0];
+            let results = await decodeVideo(blob);
+            const decodeEndTime = Date.now();
+            processDecodedResults(results);
+            const statsElem = document.getElementById("stats");
+            statsElem.textContent = `Decode time: ${decodeEndTime - startTime}ms`;
+        }
+
+        document.querySelector("#file").addEventListener('change', handleFileChange);
+
+        function saveWrapper(decodedFrames) {
+            return () => saveDataToFileFirefox(decodedFrames)
+        }
+    </script>
+</div>
+</body>
